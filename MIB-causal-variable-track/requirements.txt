@@ -12,3 +12,4 @@ ipycytoscape
 sae_lens
 transformers
 seaborn
+tensorboard
