@@ -9,15 +9,13 @@ This repository contains the implementation of the Causal Variable Localization 
     <a href="https://mib-bench.github.io"><img height="20px" src="https://img.shields.io/badge/website-black.svg" alt="website"></a>
 </p>
 
-## Overview
+## Leaderboard Submission Overview
 
-The Causal Variable Localization Track evaluates methods that can identify and manipulate specific causal variables within language model representations. The goal is to benchmark featurization methods that transform model activations into interpretable spaces where causal interventions can be performed effectively.
+The Causal Variable Localization Track evaluates methods that can identify and manipulate specific causal variables within language model (LM) representations. A **high-level causal model** serves as a hypothesis about how the **low-level LM** solves the task. A **featurizer** is an invertible function that maps from the activation space of a hidden vector to a new space and we refer to the dimensions of this new space as **features**. A submission to this track will align a variable from the causal model with features of a hidden vector in the LM. As such a submission will consist of a **token position** that identify residual stream or attention head hidden vectors in an LM and a **featurizer** that maps from that hidden vectors activation space into a new feature space. **The submission can be for any number of layers, but only submissions that provide a token position and featurizer for every layer will be added to the leaderboard for average performance, only best performance.**
 
-### How it Works
+See the Jupyter notebook [ioi_example_submission.ipynb](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/ioi_example_submission.ipynb) for an example of how to get the trained featurizer and token indices files for the ioi task and the Jupyter notebook [ioi_example_submission.ipynb](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/example_submission.ipynb) for an example of how to get the trained featurizer and token indices files for the rest of the tasks. These notebooks will save models in mock_submission folders. Currently the [mock_submission](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/) contains a mock featurizer file and mock token position file. **If not feauturizer or token position is provided in the submission, then the featurizers and token positions from the original baselines can still be used.**
 
-1. **Curate datasets** of contrastive pairs, where each pair differs only with respect to a targeted causal variable
-2. **Train featurization methods** (if supervised) using the contrastive pairs
-3. **Evaluate** by performing interventions in the transformed space and measuring whether the model's behavior aligns with expected outcomes
+The resulting submission must be formatted in a folder structure shown below and then submitted to the leaderboard at [this link](https://huggingface.co/spaces/mib-bench/leaderboard). Run the verification script [verify_submission.py](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/verify_submission.py) to ensure that custom token positions and featurizers are loaded properly. When we receive your submission, we will run the evaluation scripts [evalute_submission.py](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/evaluate_submission.py) and [ioi_evaluate_submission.py](https://github.com/aaronmueller/MIB/blob/main/MIB-causal-variable-track/ioi_evaluation_submission.py) on the private test sets and report the results on the leaderboard.
 
 ## Repository Structure
 
@@ -62,6 +60,8 @@ pip install -r requirements.txt
 ```bash
 git submodule update --init --recursive
 ```
+
+**sae_lens requires python 3.12**
 
 ### Running Example Submissions
 
@@ -167,14 +167,6 @@ python baselines/arithmetic_baselines.py
 python baselines/ravel_baselines.py
 python baselines/ioi_baselines/ioi_baselines.py
 ```
-
-## Leaderboard Submission
-
-To submit to the [MIB leaderboard](https://huggingface.co/spaces/mib-bench/leaderboard):
-
-1. Verify your submission format using `verify_submission.py`
-2. Upload your submission to a HuggingFace model repository
-3. Submit the repository link through the leaderboard interface
 
 ## Citation
 
