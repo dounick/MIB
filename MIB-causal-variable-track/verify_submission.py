@@ -448,7 +448,14 @@ if __name__ == "__main__":
         if contains_valid_triplet:
             found_triplets.add((curr_task, curr_model, curr_variable))
         else:
-            warnings.append(f"Couldn't find a valid featurizer/inverse featurizer/indices triplet in {dirname}: {message}")
+            for subdir in os.listdir(dirpath):
+                contains_valid_triplet, message = verify_directory(os.path.join(dirpath, subdir), modules)
+                if contains_valid_triplet:
+                    found_triplets.add((curr_task, curr_model, curr_variable))
+                    break
+            if not contains_valid_triplet:
+                # If we couldn't find a valid triplet, add a warning
+                warnings.append(f"Couldn't find a valid featurizer/inverse featurizer/indices triplet in {dirname}: {message}")
     
     # TODO: If we expect token position function(s) inside the task/model/counterfactual folder, verify it here
     
