@@ -18,7 +18,7 @@ import gc
 # Add the current directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from CausalAbstraction.experiments.attention_head_experiment import PatchAttentionHeads
+from CausalAbstraction.experiments.attention_head_experiment import PatchAttentionHeads, AttentionHead
 from CausalAbstraction.experiments.filter_experiment import FilterExperiment
 
 
@@ -222,7 +222,7 @@ def get_token_positions_for_ioi(pipeline, causal_model, custom_token_position_mo
     return get_token_positions(pipeline, causal_model)
 
 
-def load_attention_head_featurizers(submission_folder_path):
+def load_attention_head_featurizers(submission_folder_path, token_positions):
     """
     Load pre-trained attention head featurizers from submission folder.
     
@@ -253,46 +253,15 @@ def load_attention_head_featurizers(submission_folder_path):
         base_name = featurizer_file[:-11]  # Remove '_featurizer'
         
         # Parse the model unit ID to extract layer and head
-        # Expected format: AttentionHead(Layer:X,Head:Y,Token:all)
+        # Expected format: AttentionHead(Layer*X,Head*Y,Token*all)
+        # where * is some character
         try:
-            if "AttentionHead" in base_name and "Layer:" in base_name and "Head:" in base_name:
-                # Extract layer number
-                layer_start = base_name.find("Layer:") + 6
-                layer_end = base_name.find(",", layer_start)
-                layer = int(base_name[layer_start:layer_end])
-                
-                # Extract head number
-                head_start = base_name.find("Head:") + 5
-                head_end = base_name.find(",", head_start)
-                head = int(base_name[head_start:head_end])
-                
-                # Check if all required files exist
-                base_path = os.path.join(submission_folder_path, base_name)
-                featurizer_path = base_path + "_featurizer"
-                inverse_featurizer_path = base_path + "_inverse_featurizer"
-                indices_path = base_path + "_indices"
-                
-                missing_files = []
-                for path, name in [(featurizer_path, "featurizer"), (inverse_featurizer_path, "inverse_featurizer"), (indices_path, "indices")]:
-                    if not os.path.exists(path):
-                        missing_files.append(f"{name}: {path}")
-                
-                if missing_files:
-                    print(f"Missing files for {base_name}: {missing_files}")
-                    continue
-                
-                # Load the featurizer
-                featurizer = Featurizer.load_modules(base_path)
-                
-                # Load and set indices if they exist
-                try:
-                    with open(indices_path, 'r') as f:
-                        indices = json.load(f)
-                    if indices is not None:
-                        featurizer.set_feature_indices(indices)
-                except Exception as e:
-                    print(f"Warning: Could not load indices for {base_name}: {e}")
-                
+            if "AttentionHead" in base_name and "Layer" in base_name and "Head" in base_name:
+                # Extract layer and head from the base name
+                model_unit = AttentionHead.load_modules(base_name, submission_folder_path, token_positions)
+                featurizer =model_unit.featurizer
+                layer = model_unit.component.layer
+                head = model_unit.head
                 # Store in the featurizers dictionary with position_id "all"
                 featurizers[(layer, head)] = featurizer
                 print(f"Loaded featurizer for layer {layer}, head {head}")
@@ -306,7 +275,7 @@ def load_attention_head_featurizers(submission_folder_path):
 
 
 
-def evaluate_ioi_submission_task(task_folder_path, submission_base_path, private_data=True, public_data=False):
+def evaluate_ioi_submission_task(task_folder_path, submission_base_path, private_data=True, public_data=False, quick_test=False):
     """
     Evaluate a single IOI submission task folder.
     
@@ -323,8 +292,12 @@ def evaluate_ioi_submission_task(task_folder_path, submission_base_path, private
     task, model, variable = parse_ioi_submission_folder(folder_name)
     
     if not all([task, model, variable]):
-        print(f"ERROR: Invalid IOI folder name format: {folder_name}")
-        return False
+        # If this is a subfolder, use the parent folder name
+        folder_name = os.path.basename(os.path.dirname(task_folder_path))
+        task, model, variable = parse_ioi_submission_folder(folder_name)
+        if not all([task, model, variable]):
+            print(f"ERROR: Invalid IOI folder name format: {folder_name}")
+            return False
     
     print(f"\n{'='*60}")
     print(f"Evaluating IOI submission: {folder_name}")
@@ -343,7 +316,8 @@ def evaluate_ioi_submission_task(task_folder_path, submission_base_path, private
         
         # Load datasets
         print("Loading IOI datasets...")
-        counterfactual_datasets = get_counterfactual_datasets(hf=True, size=None, load_private_data=private_data)
+        size = 10 if quick_test else None  # Limit size for quick test
+        counterfactual_datasets = get_counterfactual_datasets(hf=True, size=size, load_private_data=private_data)
         
         print(f"Loaded {len(counterfactual_datasets)} datasets")
         
@@ -373,9 +347,9 @@ def evaluate_ioi_submission_task(task_folder_path, submission_base_path, private
         
         # Load pre-trained attention head featurizers from submission
         print("Loading pre-trained attention head featurizers...")
-        featurizers = load_attention_head_featurizers(task_folder_path)
+        featurizers = load_attention_head_featurizers(task_folder_path, token_positions)
         
-        if not featurizers:
+        if not featurizers or len(featurizers) == 0:
             print("ERROR: No attention head featurizers found in submission folder")
             return False
         
@@ -452,6 +426,8 @@ def main():
                        help="Evaluate on public test data (default: True)")
     parser.add_argument("--specific_task", type=str, default=None,
                        help="Evaluate only a specific task folder")
+    parser.add_argument("--quick_test", action="store_true",
+                       help="Run a quick test with limited data (for debugging purposes)")
     
     args = parser.parse_args()
     
@@ -489,8 +465,13 @@ def main():
     total = len(task_folders)
     
     for task_folder_path in task_folders:
-        if evaluate_ioi_submission_task(task_folder_path, submission_path, args.private_data, args.public_data):
+        if evaluate_ioi_submission_task(task_folder_path, submission_path, args.private_data, args.public_data, quick_test=args.quick_test):
             successful += 1
+            continue
+        for subfolder in os.listdir(task_folder_path):
+            subfolder_path = os.path.join(task_folder_path, subfolder)
+            if evaluate_ioi_submission_task(subfolder_path, submission_path, args.private_data, args.public_data, quick_test=args.quick_test):
+                successful += 1
     
     print(f"\n{'='*60}")
     print(f"IOI EVALUATION COMPLETE")

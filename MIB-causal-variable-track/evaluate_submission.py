@@ -19,6 +19,7 @@ import gc
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from CausalAbstraction.experiments.residual_stream_experiment import PatchResidualStream
+from CausalAbstraction.neural.LM_units import ResidualStream
 from CausalAbstraction.experiments.filter_experiment import FilterExperiment
 
 
@@ -185,13 +186,13 @@ def get_token_positions(task, pipeline, causal_model, custom_token_position_modu
     return get_token_positions(pipeline, causal_model)
 
 
-def load_featurizers_from_submission(submission_folder_path, pipeline):
+def load_featurizers_from_submission(submission_folder_path, token_positions):
     """
     Load pre-trained featurizers from submission folder.
     
     Args:
         submission_folder_path (str): Path to specific submission folder
-        pipeline: LM pipeline with model configuration
+        token_positions (list): Dict of TokenPosition objects
         
     Returns:
         dict: Dictionary mapping (layer, position_id) tuples to Featurizer objects
@@ -217,41 +218,14 @@ def load_featurizers_from_submission(submission_folder_path, pipeline):
         base_name = featurizer_file[:-11]  # Remove '_featurizer'
         
         # Parse the model unit ID to extract layer and position
-        # Expected format: ResidualStream(Layer:X,Token:Y)
+        # Expected format: ResidualStream(Layer*X,Token*Y)
+        # where * is some character like _ or :
         try:
-            if "ResidualStream" in base_name and "Layer:" in base_name and "Token:" in base_name:
-                # Extract layer number
-                layer_start = base_name.find("Layer:") + 6
-                layer_end = base_name.find(",", layer_start)
-                layer = int(base_name[layer_start:layer_end])
-                
-                # Extract token position
-                token_start = base_name.find("Token:") + 6
-                token_end = base_name.find(")", token_start)
-                position_id = base_name[token_start:token_end]
-                
-                # Check if all required files exist
-                base_path = os.path.join(submission_folder_path, base_name)
-                featurizer_path = base_path + "_featurizer"
-                inverse_featurizer_path = base_path + "_inverse_featurizer"
-                indices_path = base_path + "_indices"
-                
-                if not all(os.path.exists(p) for p in [featurizer_path, inverse_featurizer_path, indices_path]):
-                    print(f"Missing files for {base_name}")
-                    continue
-                
-                # Load the featurizer
-                featurizer = Featurizer.load_modules(base_path)
-                
-                # Load and set indices if they exist
-                try:
-                    with open(indices_path, 'r') as f:
-                        indices = json.load(f)
-                    if indices is not None:
-                        featurizer.set_feature_indices(indices)
-                except Exception as e:
-                    print(f"Warning: Could not load indices for {base_name}: {e}")
-                
+            if "ResidualStream" in base_name and "Layer" in base_name and "Token" in base_name:
+                model_unit = ResidualStream.load_modules(base_name, submission_folder_path, token_positions)
+                featurizer =model_unit.featurizer
+                layer = model_unit.component.layer
+                position_id = model_unit.token_indices.id
                 # Store in the featurizers dictionary
                 featurizers[(layer, position_id)] = featurizer
                 print(f"Loaded featurizer for layer {layer}, position {position_id}")
@@ -277,12 +251,18 @@ def evaluate_submission_task(task_folder_path, submission_base_path, private_dat
     Returns:
         bool: True if evaluation successful, False otherwise
     """
+    if task_folder_path is None or not os.path.isdir(task_folder_path):
+        print(f"ERROR: Invalid task folder path: {task_folder_path}")
+        return False
     folder_name = os.path.basename(task_folder_path)
     task, model, variable = parse_submission_folder(folder_name)
     
     if not all([task, model, variable]):
-        print(f"ERROR: Invalid folder name format: {folder_name}")
-        return False
+        parent_dir = os.path.dirname(task_folder_path)
+        task, model, variable = parse_submission_folder(os.path.basename(parent_dir))
+        if not all([task, model, variable]):
+            print(f"ERROR: Invalid folder name format: {folder_name}")
+            return False
     
     print(f"\n{'='*60}")
     print(f"Evaluating: {folder_name}")
@@ -335,7 +315,7 @@ def evaluate_submission_task(task_folder_path, submission_base_path, private_dat
         
         # Load pre-trained featurizers from submission
         print("Loading pre-trained featurizers...")
-        featurizers = load_featurizers_from_submission(task_folder_path, pipeline)
+        featurizers = load_featurizers_from_submission(task_folder_path, token_positions)
         
         if not featurizers:
             print("ERROR: No featurizers found in submission folder")
@@ -440,6 +420,11 @@ def main():
     for task_folder_path in task_folders:
         if evaluate_submission_task(task_folder_path, submission_path, args.private_data, args.public_data):
             successful += 1
+            continue
+        for subfolder in os.listdir(task_folder_path):
+            subfolder_path = os.path.join(task_folder_path, subfolder)
+            if evaluate_submission_task(subfolder_path, submission_path, args.private_data, args.public_data):
+                successful += 1
     
     print(f"\n{'='*60}")
     print(f"EVALUATION COMPLETE")
