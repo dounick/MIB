@@ -337,6 +337,9 @@ def print_latex_table(results, print_highs=False, merge_variables=True):
         "  \\begin{tabular}{l" + "".join(["c" * len(models[task])*len(variables[task]) for task in tasks]) + "}",
         "    \\toprule"
     ]
+
+    scaling_factor = 1 if "ioi" in task else 100
+    rounding_factor = 2 if "ioi" in task else 0
     
     if merge_variables:
         # First row - Task names with multicolumns
@@ -372,13 +375,13 @@ def print_latex_table(results, print_highs=False, merge_variables=True):
                     key = (method, model, task)
                     if key in averages:
                         # Round to the nearest digit
-                        value = int(round(100*averages[key], 0))
+                        value = int(round(scaling_factor*averages[key], rounding_factor))
                         row.append(f"{value}")
 
                         for target_variable in variables[task]:
                             if key in highs and target_variable in highs[key] and print_highs:
                                 # Append the highest accuracy
-                                row[-1] += f" ({variables_display[target_variable]}={round(100*highs[key][target_variable], 0)})"
+                                row[-1] += f" ({variables_display[target_variable]}={round(scaling_factor*highs[key][target_variable], rounding_factor)})"
                     else:
                         row.append("--")
             latex_code.append(" & ".join(row) + " \\\\")
