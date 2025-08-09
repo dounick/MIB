@@ -14,6 +14,7 @@ import argparse
 import importlib.util
 import torch
 import gc
+import re
 
 # Add the current directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -208,8 +209,8 @@ def load_featurizers_from_submission(submission_folder_path, token_positions):
         print(f"Submission folder not found: {submission_folder_path}")
         return featurizers
     
-    # Find all featurizer files (those ending with '_featurizer')
-    featurizer_files = [f for f in files if f.endswith('_featurizer')]
+    # Find all featurizer files (those ending with '_featurizer' but not '_inverse_featurizer')
+    featurizer_files = [f for f in files if f.endswith('_featurizer') and not f.endswith('_inverse_featurizer')]
     
     print(f"Found {len(featurizer_files)} featurizer files")
     
@@ -295,10 +296,56 @@ def evaluate_submission_task(task_folder_path, submission_base_path, private_dat
         token_positions = get_token_positions(task, pipeline, causal_model, token_position_module)
         print(f"Using {len(token_positions)} token positions")
         
-        # Setup checker function
-        def checker(output_text, expected):
+        # Define task-specific checker functions
+        def simple_checker(output_text, expected):
             return expected in output_text
         
+        def arithmetic_checker(output_text, expected):
+            # Clean the output by extracting just the numbers
+            numbers_in_output = re.findall(r'\d+', output_text)
+            if not numbers_in_output:
+                return False
+            
+            # Get the first number found
+            first_number = numbers_in_output[0]
+            
+            # Handle the case where expected has leading zero and output doesn't
+            if expected[0] == "0":
+                expected_no_leading_zero = expected[1:]
+                return first_number == expected_no_leading_zero or first_number == expected
+            return first_number == expected
+        
+        def ravel_checker(output_text, expected):
+            if output_text is None:
+                return False
+
+            output_clean = re.sub(r'[^\w\s]+', '', output_text.lower()).strip()
+            expected_list = [e.strip().lower() for e in expected.split(',')]
+
+            if any(part in output_clean for part in expected_list):
+                return True
+            
+            # Edge cases
+            if re.search(r'united states|united kingdom|czech republic', expected, re.IGNORECASE):
+                raw_expected = expected.strip().lower().replace('the ', '')
+                raw_output = output_text.strip().lower().replace('the ', '')
+                if raw_output.startswith(raw_expected) or raw_output.startswith('england') or raw_output == "us":
+                    return True
+            if re.search(r'south korea', expected, re.IGNORECASE):
+                if output_clean.startswith('korea') or output_clean.startswith('south korea'):
+                    return True
+                    
+            return False
+        
+        # Setup checker function based on task
+        checker_by_task = {
+            "4_answer_MCQA": simple_checker,
+            "ARC_easy": simple_checker,
+            "arithmetic": arithmetic_checker,
+            "ravel_task": ravel_checker
+        }
+        
+        checker = checker_by_task.get(task, simple_checker)
 
         batch_size_by_task = {
             "4_answer_MCQA": 128,
