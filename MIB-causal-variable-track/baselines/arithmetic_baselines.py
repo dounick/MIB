@@ -46,10 +46,6 @@ if __name__ == "__main__":
         # Get the first number found
         first_number = numbers_in_output[0]
         
-        # Handle the case where expected has leading zero and output doesn't
-        if expected[0] == "0":
-            expected_no_leading_zero = expected[1:]
-            return first_number == expected_no_leading_zero or first_number == expected
         return first_number == expected
     
     # Function to clear memory between experiments

@@ -50,6 +50,16 @@ def get_causal_model():
         "raw_output": ["hundreds_out", "tens_out", "ones_out"]  # Depends on the result digits
     }
 
+    def raw_output_mechanism(hundreds_out, tens_out, ones_out):
+        """
+        Generate the raw output string based on result digits.
+        """
+        if hundreds_out == 0:
+            if tens_out == 0:
+                return f"{ones_out:01d}"
+            return f"{tens_out:01d}{ones_out:01d}"
+        return f"{hundreds_out:01d}{tens_out:01d}{ones_out:01d}"
+
     # Define the mechanisms (the functions computing each node's value).
     mechanisms = {
         # Generate the raw input based on operands
@@ -69,8 +79,7 @@ def get_causal_model():
         "hundreds_out": lambda op1_tens, op2_tens, ones_carry: 1 if op1_tens + op2_tens + ones_carry > 9 else 0,
         
         # Generate the raw output based on result digits
-        "raw_output": lambda hundreds_out, tens_out, ones_out: 
-            f"{hundreds_out:01d}{tens_out:01d}{ones_out:01d}"
+        "raw_output": raw_output_mechanism
     }
 
     return CausalModel(variables, values, parents, mechanisms, id="arithmetic")
