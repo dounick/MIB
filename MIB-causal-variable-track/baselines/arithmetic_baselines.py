@@ -2,9 +2,9 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from tasks.two_digit_addition_task.arithmetic import get_token_positions, get_counterfactual_datasets, get_causal_model
-from experiments.aggregate_experiments import residual_stream_baselines
-from neural.pipeline import LMPipeline
-from experiments.filter_experiment import FilterExperiment
+from CausalAbstraction.experiments.aggregate_experiments import residual_stream_baselines
+from CausalAbstraction.neural.pipeline import LMPipeline
+from CausalAbstraction.experiments.filter_experiment import FilterExperiment
 import torch
 import gc
 import os

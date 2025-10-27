@@ -64,14 +64,19 @@ def convert_two_digit_addition_to_das_format(filtered_datasets, tokenizer, outpu
 
             rows.append({
                 "input_ids": json.dumps(base_ids),
+                "base_prompt": base_prompt,
                 "source_input_ids": json.dumps(cf_ids),
+                "counterfactual_prompt": cf_prompt,
+                "intervention_output": post_sum,
                 "labels": json.dumps(labels),
                 "intervention_ids": 0,
+                "base_carry_flag": base_c,
+                "counterfactual_carry_flag": cf_c
             })
 
         csv_path = f"{output_prefix}_{name}.csv"
         with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["input_ids", "source_input_ids", "labels", "intervention_ids"])
+            writer = csv.DictWriter(f, fieldnames=["input_ids", "base_prompt", "source_input_ids", "counterfactual_prompt", "intervention_output", "labels", "intervention_ids", "base_carry_flag", "counterfactual_carry_flag"])
             writer.writeheader()
             writer.writerows(rows)
 
@@ -122,32 +127,26 @@ model_name = "meta-llama/Llama-3.1-8B"
 device = "cuda:0"
 counterfactual_datasets = get_counterfactual_datasets(hf=True, size=None, load_private_data=False)
 
-def standardize_prompt(example):
-    # Update input raw_input
-    op1 = example['input']['op1_tens'] * 10 + example['input']['op1_ones']
-    op2 = example['input']['op2_tens'] * 10 + example['input']['op2_ones']
-    example['input']['raw_input'] = f'{op1} + {op2} = '
+# we dont actually need to standardize cause its done already in another function
+
+# def standardize_prompt(example):
+#     # Update input raw_input
+#     op1 = example['input']['op1_tens'] * 10 + example['input']['op1_ones']
+#     op2 = example['input']['op2_tens'] * 10 + example['input']['op2_ones']
+#     example['input']['raw_input'] = f'{op1} + {op2} = '
     
-    # Update counterfactual_inputs raw_input
-    cf_op1 = example['counterfactual_inputs'][0]['op1_tens'] * 10 + example['counterfactual_inputs'][0]['op1_ones']
-    cf_op2 = example['counterfactual_inputs'][0]['op2_tens'] * 10 + example['counterfactual_inputs'][0]['op2_ones']
-    example['counterfactual_inputs'][0]['raw_input'] = f'{cf_op1} + {cf_op2} = '
+#     # Update counterfactual_inputs raw_input
+#     cf_op1 = example['counterfactual_inputs'][0]['op1_tens'] * 10 + example['counterfactual_inputs'][0]['op1_ones']
+#     cf_op2 = example['counterfactual_inputs'][0]['op2_tens'] * 10 + example['counterfactual_inputs'][0]['op2_ones']
+#     example['counterfactual_inputs'][0]['raw_input'] = f'{cf_op1} + {cf_op2} = '
     
-    return example
+#     return example
 
 # Modify the underlying HuggingFace dataset for each CounterfactualDataset
-for dataset_name in ['random_train', 'random_test', 'ones_carry_train', 'ones_carry_test']:
-    counterfactual_datasets[dataset_name].dataset = counterfactual_datasets[dataset_name].dataset.map(standardize_prompt)
-
-# Now check
-print(counterfactual_datasets['random_train'][0])
-print(counterfactual_datasets['random_test'][100])
-print(counterfactual_datasets['ones_carry_train'][1000])
-print(counterfactual_datasets['ones_carry_test'][-1])
+# for dataset_name in ['random_train', 'random_test', 'ones_carry_train', 'ones_carry_test']:
+#     counterfactual_datasets[dataset_name].dataset = counterfactual_datasets[dataset_name].dataset.map(standardize_prompt)
 
 
-#if want to standardize prompt need to change the filtering part too
-#TODO
 causal_model = get_causal_model()
 pipeline = LMPipeline(model_name, max_new_tokens=1, device=device, dtype=torch.float16)
 pipeline.tokenizer.padding_side = "left"
